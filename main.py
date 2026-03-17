@@ -4,7 +4,10 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- [ الإعدادات ] ---
-API_TOKEN = os.getenv('BOT_TOKEN')
+API_TOKEN = os.getenv('8509628284:AAFSZRkfwJ9Wg5xT9utd6s1y5M-t4h0yazA')
+ADMIN_ID=6363223356
+CHANNEL_ID=@MBABmbab
+MY_WALLET=UQAXaqsRtUoSf7nIQtNMyFQ1knLyde_wA_tIO825IivGuh1L')
 ADMIN_ID = 6363223356
 CHANNEL_ID = -1002345678901 # ID قناتك
 MY_WALLET = 'UQAXaqsRtUoSf7nIQtNMyFQ1knLyde_wA_tIO825IivGuh1L'
