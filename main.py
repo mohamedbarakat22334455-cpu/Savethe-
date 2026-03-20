@@ -7,7 +7,7 @@ from aiohttp import web
 # --- [ إعدادات MB Gold ] ---
 API_TOKEN = '8758046360:AAF8ilMxOrEHLr08fOGc5yZlT5blrByj1zs'
 ADMIN_ID = 6363223356
-MY_USER_ID = "M_B_7_7_7" 
+MY_USER_ID = "t.me/MBABMBAB" 
 PORT = int(os.getenv("PORT", 8080))
 
 bot = Bot(token=API_TOKEN)
@@ -85,7 +85,6 @@ async def private_start(m: types.Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💎 مميزات الحماية VIP", callback_data="vip")],
         [InlineKeyboardButton(text="🤝 اطلب البوت لقناتك", url=f"https://t.me/{MY_USER_ID}")],
-        [InlineKeyboardButton(text="📺 شاهد فيديو توضيحي", url="https://youtube.com")] # تقدر تحط لينك فيديو ليك
     ])
     
     await m.answer(
