@@ -7,7 +7,7 @@ from aiohttp import web
 # --- [ إعدادات MB Gold ] ---
 API_TOKEN = '8758046360:AAF8ilMxOrEHLr08fOGc5yZlT5blrByj1zs'
 ADMIN_ID = 6363223356
-MY_USER_ID = "t.me/MBABMBAB" 
+MY_USER_ID = "t.me/MBABmbab" 
 PORT = int(os.getenv("PORT", 8080))
 
 bot = Bot(token=API_TOKEN)
