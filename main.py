@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermis
 from aiohttp import web
 
 # --- [ إعدادات MB Gold ] ---
-API_TOKEN = '8758046360:AAF8ilMxOrEHLr08fOGc5yZlT5blrByj1zs'
+API_TOKEN = '8758046360:AAEJXi2E_Pf2cgCdrx_bFcUpAt1W8lGwR3s'
 ADMIN_ID = 6363223356
 MY_CHANNEL = "MBABmbab" # قناتك الرسمية
 PORT = int(os.getenv("PORT", 8080))
