@@ -1,137 +1,105 @@
-import asyncio, os, sqlite3, time
+import asyncio, os, random
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
 
-# --- [ إعدادات الهوية الملكية ] ---
+# --- [ إعدادات الهوية الفخمة ] ---
 TOKEN = '8758046360:AAEJXi2E_Pf2cgCdrx_bFcUpAt1W8lGwR3s'
 ADMIN_ID = 6363223356
 CHANNEL_USER = "MBABmbab"
-PORT = int(os.getenv("PORT", 8080))
+CHANNEL_LINK = f"https://t.me/{CHANNEL_USER}"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- [ قاعدة بيانات الرتب والنقاط ] ---
-conn = sqlite3.connect('mb_magnet.db', check_same_thread=False)
-db = conn.cursor()
-db.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, points INTEGER DEFAULT 0, rank TEXT DEFAULT "برونزي 🥉")')
-conn.commit()
+# ==========================================
+# 🎭 1. ميزة "الترفيه والجذب" (Entertainment)
+# ==========================================
+@dp.message(F.text == "حظي")
+async def daily_luck(m: types.Message):
+    lucks = ["حظك اليوم ذهبي 🌟", "يوم مليء بالأكواد الناجحة 💻", "خبر سعيد في الطريق إليك ⚡", "ركز في مشروعك القادم 🚀"]
+    await m.reply(f"🔮 **توقعات MB Gold لك:**\n\n`{random.choice(lucks)}`", parse_mode="MarkdownV2")
+
+@dp.message(F.text.startswith("نسبة الحب"))
+async def love_percent(m: types.Message):
+    percent = random.randint(0, 100)
+    await m.reply(f"❤️ **نسبة التوافق هي:** `{percent}%` \n\n🔱 [تابع جديدنا]({CHANNEL_LINK})", parse_mode="MarkdownV2")
 
 # ==========================================
-# 🔐 1. محرك التحقق من الاشتراك (Force Sub)
+# 🆔 2. كارت الهوية المطور (User Card)
 # ==========================================
-async def check_subscription(user_id):
-    try:
-        member = await bot.get_chat_member(f"@{CHANNEL_USER}", user_id)
-        return member.status != "left"
-    except: return True
-
-# ==========================================
-# 🎭 2. نظام الرتب والملف الشخصي (ID)
-# ==========================================
-@dp.message(F.text.in_({"ايدي", "ID", "/id", "ملفي"}))
-async def user_profile(m: types.Message):
-    db.execute('SELECT points, rank FROM users WHERE user_id = ?', (m.from_user.id,))
-    res = db.fetchone()
-    points = res[0] if res else 0
-    rank = res[1] if res else "برونزي 🥉"
-
-    profile_text = (
-        f"🔱 **بطاقة الهوية الملكية - MB Gold**\n\n"
-        f"👤 **الاسم:** `{m.from_user.first_name}`\n"
-        f"🆔 **المعرف:** `{m.from_user.id}`\n"
-        f"🏆 **الرتبة:** {rank}\n"
-        f"✨ **النقاط:** `{points}`\n\n"
-        f"🛡 _نظام حماية وتطوير MBAB المتكامل\._"
-    )
-    await m.answer(profile_text, parse_mode="MarkdownV2")
-
-# ==========================================
-# 🛡️ 3. حماية الجروبات + الجذب القسري
-# ==========================================
-@dp.message(F.chat.type.in_({"group", "supergroup"}))
-async def group_guard(m: types.Message):
-    # تسجيل المستخدم وتحديث نقاطه (تفاعل)
-    db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (m.from_user.id,))
-    db.execute('UPDATE users SET points = points + 1 WHERE user_id = ?', (m.from_user.id,))
-    conn.commit()
-
-    # فحص الاشتراك الإجباري داخل الجروب (اختياري - يفضل في الخاص)
-    # إذا أردت كتم غير المشتركين، فعل الكود التالي:
-    """
-    if not await check_subscription(m.from_user.id):
-        try:
-            await m.delete()
-            # إرسال تنبيه وحذفه بعد 5 ثواني
-            return
-        except: pass
-    """
+@dp.message(F.text.in_({"ايدي", "ID", "ايديه"}))
+async def premium_id(m: types.Message):
+    # تحديد الرتبة بشكل شيك
+    status = "العضو الملكي 👑" if m.from_user.id == ADMIN_ID else "عضو ذهبي ✨"
     
-    # فلتر الكلمات (تطوير الأسلوب)
-    blacklist = ["t.me/", "http", "شتيمة"]
-    if m.text and any(w in m.text.lower() for w in blacklist):
-        user = await bot.get_chat_member(m.chat.id, m.from_user.id)
-        if user.status not in ["administrator", "creator"]:
-            await m.delete()
+    card = (
+        f"🔱 **بـطـاقـة نـخـبـة MB Gold**\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"👤 **الاسم:** `{m.from_user.first_name}`\n"
+        f"🆔 **الأيدي:** `{m.from_user.id}`\n"
+        f"🏆 **الرتبة:** {status}\n"
+        f"📡 **الحالة:** متصل بنظام MBAB\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"📢 [انضم لقناتنا الرسمية]({CHANNEL_LINK})"
+    )
+    await m.answer(card, parse_mode="MarkdownV2", disable_web_page_preview=True)
 
 # ==========================================
-# 🎨 4. الترحيب "المغناطيسي" (Welcome)
+# 🎨 3. الترحيب "الديناميكي" (Dynamic Welcome)
 # ==========================================
 @dp.message(F.new_chat_members)
-async def welcome_viral(m: types.Message):
+async def welcome_v8(m: types.Message):
     for user in m.new_chat_members:
-        kb = InlineKeyboardBuilder()
-        kb.row(InlineKeyboardButton(text="💎 انضم للمنظومة الذهبية", url=f"https://t.me/{CHANNEL_USER}"))
+        welcomes = [
+            f"نورت عالمنا يا {user.mention_markdown()}\! ✨",
+            f"عضو جديد انضم لنخبة MB Gold: {user.mention_markdown()} 👑",
+            f"أهلاً بك في أقوى مجتمع تقني: {user.mention_markdown()} 🚀"
+        ]
+        
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="💎 دخول القناة الملكية", url=CHANNEL_LINK))
         
         await m.answer(
-            f"👑 **مرحباً بك في المنطقة الملكية\!**\n\n"
-            f"يا {user.mention_markdown()}\n"
-            f"أنت الآن تحت حماية نظام **MB Gold** الذكي\.\n"
-            f"تفاعل لترقية رتبتك والحصول على مميزات VIP 🏆\.",
+            f"🔱 {random.choice(welcomes)}\n\n"
+            f"استمتع بمميزات الحماية والترفيه الحصرية بالأسفل 👇",
             parse_mode="MarkdownV2",
-            reply_markup=kb.as_markup()
+            reply_markup=builder.as_markup()
         )
     try: await m.delete()
     except: pass
 
 # ==========================================
-# 🚀 5. واجهة البداية (The Hook)
+# 👑 4. واجهة البداية (The Hook)
 # ==========================================
 @dp.message(CommandStart(), F.chat.type == "private")
-async def start_private(m: types.Message):
-    # الفخ: الاشتراك الإجباري
-    if not await check_subscription(m.from_user.id):
-        kb = InlineKeyboardBuilder()
-        kb.row(InlineKeyboardButton(text="✅ اشترك لتفعيل البوت", url=f"https://t.me/{CHANNEL_USER}"))
-        return await m.answer(
-            f"⚠️ **عذراً\! الوصول محدود**\n\n"
-            f"يجب عليك الاشتراك في قناة **MB Gold الرسمية** لتتمكن من استخدام خدمات البوت الملكية\.",
-            parse_mode="MarkdownV2", reply_markup=kb.as_markup()
-        )
-
+async def private_v8(m: types.Message):
     kb = InlineKeyboardBuilder()
-    kb.row(InlineKeyboardButton(text="➕ أضفني لجروبك الآن", url=f"https://t.me/{(await bot.get_me()).username}?startgroup=true"))
-    kb.row(InlineKeyboardButton(text="📊 إحصائياتي", callback_data="stats"), InlineKeyboardButton(text="🔗 شارك البوت", switch_inline_query=""))
+    kb.row(InlineKeyboardButton(text="📢 اشترك في MBAB", url=CHANNEL_LINK))
+    kb.row(InlineKeyboardButton(text="➕ أضفني لجروبك (ستايل VIP)", url=f"https://t.me/{(await bot.get_me()).username}?startgroup=true"))
     
     await m.answer(
-        f"🔱 **مرحباً بك في مركز تحكم MB Gold**\n\n"
-        f"أقوى نظام لإدارة وحماية المجموعات بأسلوب عصري\.\n\n"
-        f"✅ **حالة الحساب:** عضو ملكي\n"
-        f"🚀 **الإصدار:** Black VIP V6",
-        parse_mode="MarkdownV2", reply_markup=kb.as_markup()
+        f"👑 **مرحباً بك في الإصدار الثامن من MB Gold**\n\n"
+        f"البوت الآن يعمل بنظام **التفاعل الذكي** لإحياء مجموعتك وجذب الأعضاء لقناتك فوراً\.\n\n"
+        f"✅ اشتراكك في القناة هو مفتاح تشغيل الميزات الذهبية\.",
+        parse_mode="MarkdownV2",
+        reply_markup=kb.as_markup()
     )
 
 # ==========================================
-# 🌐 6. تشغيل المحرك (Railway Ready)
+# 🚀 5. انطلاق المحرك (Railway Ready)
 # ==========================================
-async def handle(request): return web.Response(text="MB Gold Magnet is Running!")
+async def handle(request): return web.Response(text="MB Gold V8 is Vibrant!")
+
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    asyncio.create_task(web._run_app(web.Application().add_routes([web.get('/', handle)]), port=PORT))
-    print("🔥 MB Gold Magnet is Online!")
+    app = web.Application(); app.router.add_get('/', handle)
+    runner = web.AppRunner(app); await runner.setup()
+    await web.TCPSite(runner, '0.0.0.0', int(os.getenv("PORT", 8080))).start()
+    
+    print("🔥 MB Gold V8: The Elite Engine is Roaring!")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
