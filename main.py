@@ -1,5 +1,4 @@
-
-import asyncio, os, sqlite3, time, random, logging
+import asyncio, os, sqlite3, time, random, logging, re
 from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.filters import Command, CommandStart, ChatMemberUpdatedFilter, IS_MEMBER, IS_NOT_MEMBER
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions, ChatMemberUpdated
@@ -7,7 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
 
 # ==========================================
-# 👑 [ 1. الهوية والتوكنات ]
+# 👑 [ 1. الإعدادات والتوكنات ]
 # ==========================================
 TOKEN = '8758046360:AAEJXi2E_Pf2cgCdrx_bFcUpAt1W8lGwR3s'
 ADMIN_ID = 6363223356
@@ -16,17 +15,18 @@ CHANNEL_LINK = f"https://t.me/{CHANNEL_USER}"
 PORT = int(os.getenv("PORT", 8080))
 
 # فلاتر الحماية (الكلمات، الروابط، الإعلانات)
-BAD_WORDS = ["شتيمة", "t.me/", "http", "زفت", "إعلان", "كسم", "عرص", "متناك", "سكس", "شرموط"]
+BAD_WORDS = ["شتيمة", "t.me/", "http", "زفت", "إعلان", "كسم", "عرص", "متناك", "سكس", "قحبة", "شرموط"]
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # ==========================================
-# 💾 [ 2. قاعدة البيانات (الأرشيف الكامل) ]
+# 💾 [ 2. قاعدة البيانات (الأرشيف المركزي) ]
 # ==========================================
-conn = sqlite3.connect('mb_gold_final_master.db', check_same_thread=False)
+conn = sqlite3.connect('mb_gold_ultimate.db', check_same_thread=False)
 db = conn.cursor()
+# جداول: المستخدمين (نقاط، رصيد، محفظة)، الجروبات، الإنذارات
 db.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, points INTEGER DEFAULT 0, balance REAL DEFAULT 0.0, wallet TEXT DEFAULT "لم تسجل")')
 db.execute('CREATE TABLE IF NOT EXISTS groups (chat_id INTEGER PRIMARY KEY, title TEXT)')
 db.execute('CREATE TABLE IF NOT EXISTS warns (chat_id INTEGER, user_id INTEGER, count INTEGER DEFAULT 0, PRIMARY KEY(chat_id, user_id))')
@@ -61,11 +61,11 @@ async def is_subscribed(uid):
 def get_rank(p, uid):
     if uid == ADMIN_ID: return "المطور الإمبراطوري 👑"
     if p >= 5000: return "الملك الذهبي 🏆"
-    if p >= 1000: return "VIP 💎"
+    if p >= 1000: return "الأسطورة VIP 💎"
     return "عضو جديد 🌱"
 
 # ==========================================
-# 🤖 [ 5. الترحيب والتحقق (كابتشا) ]
+# 🤖 [ 5. الترحيب والتحقق (بدون زحمة) ]
 # ==========================================
 @dp.chat_member(ChatMemberUpdatedFilter(member_status_changed=IS_NOT_MEMBER >> IS_MEMBER))
 async def welcome_captcha(event: ChatMemberUpdated):
@@ -97,7 +97,7 @@ async def link_handler(m: types.Message):
 # 🎮 [ 7. الأقسام المنفصلة (كل ميزة لوحدها) ]
 # ==========================================
 
-@dp.message(F.text.in_({"ايدي", "ID", "ملفي"}))
+@dp.message(F.text.in_({"ايدي", "ID", "ملفي", "ايديه"}))
 async def profile_info(m: types.Message):
     db.execute('SELECT points, balance, wallet FROM users WHERE user_id = ?', (m.from_user.id,))
     res = db.fetchone(); pts, bal, wal = (res[0], res[1], res[2]) if res else (0, 0.0, "غير مسجل")
@@ -132,6 +132,7 @@ async def group_logic(m: types.Message):
         try: await m.delete(); return
         except: pass
 
+    # نظام تجميع النقاط (Mining)
     db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (m.from_user.id,))
     db.execute('UPDATE users SET points = points + 1 WHERE user_id = ?', (m.from_user.id,))
     conn.commit()
@@ -150,7 +151,6 @@ async def group_logic(m: types.Message):
             if text in ["حظر", "/ban"]: await bot.ban_chat_member(m.chat.id, tid); await m.answer("🚫 تم الطرد.")
             elif text in ["كتم", "/mute"]: await bot.restrict_chat_member(m.chat.id, tid, permissions=ChatPermissions(can_send_messages=False)); await m.answer("🤐 تم الكتم.")
             elif text in ["فك الكتم", "/unmute"]: await bot.restrict_chat_member(m.chat.id, tid, permissions=ChatPermissions(can_send_messages=True)); await m.answer("🔊 تم الفك.")
-            elif text in ["تثبيت", "/pin"]: await bot.pin_chat_message(m.chat.id, m.reply_to_message.message_id); await m.answer("📌 تم التثبيت.")
             elif text in ["انذار", "/warn"]:
                 db.execute('INSERT OR IGNORE INTO warns VALUES (?, ?, 0)', (m.chat.id, tid))
                 db.execute('UPDATE warns SET count = count + 1 WHERE chat_id = ? AND user_id = ?', (m.chat.id, tid))
