@@ -1,106 +1,110 @@
-import asyncio, os, sqlite3, time, logging
-from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
-from aiogram.filters import Command, CommandStart, ChatMemberUpdatedFilter, IS_MEMBER, IS_NOT_MEMBER
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions, ChatMemberUpdated
+import asyncio, os, sqlite3, time
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command, CommandStart
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
 
-# --- [ إعدادات النظام ] ---
+# --- [ إعدادات البراند ] ---
 TOKEN = '8758046360:AAEJXi2E_Pf2cgCdrx_bFcUpAt1W8lGwR3s'
 ADMIN_ID = 6363223356
-OFFICIAL_CHANNEL = "MBABmbab"
+CHANNEL_USER = "MBABmbab" # يوزرك بدون @
 PORT = int(os.getenv("PORT", 8080))
 
-logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- [ قاعدة البيانات ] ---
-conn = sqlite3.connect('mb_final.db', check_same_thread=False)
+# --- [ قاعدة البيانات - لتخزين النقاط والمشتركين ] ---
+conn = sqlite3.connect('mb_viral.db', check_same_thread=False)
 db = conn.cursor()
-db.execute('CREATE TABLE IF NOT EXISTS settings (chat_id INTEGER PRIMARY KEY, anti_link INTEGER DEFAULT 1)')
+db.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, points INTEGER DEFAULT 0)')
 conn.commit()
 
-# --- [ Middleware: حماية من الإغراق/السبام ] ---
-class AntiFloodMiddleware(BaseMiddleware):
-    def __init__(self, limit=2):
-        self.last_from_user = {}
-        super().__init__()
-    async def __call__(self, handler, event, data):
-        user_id = event.from_user.id
-        now = time.time()
-        if user_id in self.last_from_user and now - self.last_from_user[user_id] < limit:
-            return
-        self.last_from_user[user_id] = now
-        return await handler(event, data)
-
-dp.message.middleware(AntiFloodMiddleware())
+# ==========================================
+# 🔐 1. فحص الاشتراك (محرك الجذب)
+# ==========================================
+async def is_subscribed(user_id):
+    try:
+        member = await bot.get_chat_member(f"@{CHANNEL_USER}", user_id)
+        return member.status != "left"
+    except: return True # لو البوت مش أدمن هيعدي الناس مؤقتاً
 
 # ==========================================
-# 🌐 1. Server Health (Railway)
+# 🎨 2. الترحيب "المبهر" (Welcome Viral)
 # ==========================================
-async def handle(request): return web.Response(text="MB Gold is Live!")
-async def start_web():
+@dp.message(F.new_chat_members)
+async def viral_welcome(m: types.Message):
+    for user in m.new_chat_members:
+        kb = InlineKeyboardBuilder()
+        kb.row(InlineKeyboardButton(text="🏆 انضم لعالم MB Gold", url=f"https://t.me/{CHANNEL_USER}"))
+        
+        # رسالة ترحيب فخمة بـ MarkdownV2
+        await m.answer(
+            f"✨ **أهلاً بك يا {user.mention_markdown()} في أرقى مجموعات تليجرام\!**\n\n"
+            f"لقد تم تفعيل حماية **MB Gold** لتأمين وجودك معنا\. استمتع بتجربة فريدة وآمنة 🛡\.",
+            parse_mode="MarkdownV2",
+            reply_markup=kb.as_markup()
+        )
+    try: await m.delete() # مسح رسالة "انضم فلان" عشان النظافة
+    except: pass
+
+# ==========================================
+# 💰 3. نظام التفاعل (نقاط MB الذهبية)
+# ==========================================
+@dp.message(Command("points"))
+async def my_points(m: types.Message):
+    db.execute('SELECT points FROM users WHERE user_id = ?', (m.from_user.id,))
+    res = db.fetchone()
+    p = res[0] if res else 0
+    await m.answer(f"🔱 **رصيدك من نقاط MB الذهبية:** `{p}` نقطة\n\n*كلما تفاعلت أكثر، زادت رتبتك في النظام!*", parse_mode="Markdown")
+
+# ==========================================
+# 🚀 4. واجهة البداية (The Marketing Dashboard)
+# ==========================================
+@dp.message(CommandStart(), F.chat.type == "private")
+async def viral_start(m: types.Message):
+    # 1. فحص الاشتراك الإجباري
+    if not await is_subscribed(m.from_user.id):
+        kb = InlineKeyboardBuilder()
+        kb.row(InlineKeyboardButton(text="✅ اشترك لتفعيل النسخة الذهبية", url=f"https://t.me/{CHANNEL_USER}"))
+        return await m.answer(
+            f"⚠️ **عذراً يا {m.from_user.first_name}\!**\n\n"
+            f"يجب عليك الانضمام لقناة المطور أولاً للاستفادة من مميزات البوت الحصرية\.",
+            parse_mode="MarkdownV2", reply_markup=kb.as_markup()
+        )
+
+    # 2. تسجيل المستخدم
+    db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (m.from_user.id,))
+    conn.commit()
+
+    # 3. واجهة فخمة
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="➕ أضفني لجروبك (حماية مجانية)", url=f"https://t.me/{(await bot.get_me()).username}?startgroup=true"))
+    builder.row(InlineKeyboardButton(text="💎 مميزات الـ VIP", callback_data="vip_features"),
+                InlineKeyboardButton(text="🔗 دعوة صديق", switch_inline_query="انصحك باستخدام هذا البوت الجبار!"))
+    builder.row(InlineKeyboardButton(text="🏆 قناتنا الرسمية", url=f"https://t.me/{CHANNEL_USER}"))
+
+    await m.answer(
+        f"👑 **مرحباً بك في مركز تحكم MB Gold**\n\n"
+        f"أنت الآن تستخدم الإصدار **V5 Black Edition**\.\n"
+        f"هذا البوت ليس مجرد حماية، بل هو بوابتك للتميز على تليجرام\.\n\n"
+        f"✅ **حسابك:** بريميوم نشط\n"
+        f"✨ **النقاط:** مفعّلة",
+        parse_mode="MarkdownV2",
+        reply_markup=builder.as_markup()
+    )
+
+# ==========================================
+# 🌐 5. تشغيل السيرفر (The Engine)
+# ==========================================
+async def handle(request): return web.Response(text="MB Gold Viral is Live!")
+async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
     app = web.Application(); app.router.add_get('/', handle)
     runner = web.AppRunner(app); await runner.setup()
     await web.TCPSite(runner, '0.0.0.0', PORT).start()
-
-# ==========================================
-# 🛡️ 2. نظام التحقق البشري (Captcha)
-# ==========================================
-@dp.chat_member(ChatMemberUpdatedFilter(member_status_changed=IS_NOT_MEMBER >> IS_MEMBER))
-async def on_user_join(event: ChatMemberUpdated):
-    user = event.from_user
-    try:
-        await bot.restrict_chat_member(event.chat.id, user.id, permissions=ChatPermissions(can_send_messages=False))
-        kb = InlineKeyboardBuilder()
-        kb.add(InlineKeyboardButton(text="✅ اضغط للتحقق (60 ثانية)", callback_data=f"v_{user.id}"))
-        await bot.send_message(event.chat.id, f"🔱 أهلاً {user.mention_markdown()}\! إثبت إنك مش بوت بالضغط أدناه\.", parse_mode="MarkdownV2", reply_markup=kb.as_markup())
-    except: pass
-
-@dp.callback_query(F.data.startswith("v_"))
-async def verify(call: types.CallbackQuery):
-    u_id = int(call.data.split("_")[1])
-    if call.from_user.id != u_id: return await call.answer("الزر مش ليك!", show_alert=True)
-    await bot.restrict_chat_member(call.message.chat.id, u_id, permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True))
-    await call.message.delete()
-    await call.answer("تم التحقق بنجاح! 👑")
-
-# ==========================================
-# ⚙️ 3. لوحة التحكم (Admin Panel)
-# ==========================================
-@dp.message(Command("settings"))
-async def settings(m: types.Message):
-    user = await bot.get_chat_member(m.chat.id, m.from_user.id)
-    if user.status not in ["administrator", "creator"] and m.from_user.id != ADMIN_ID: return
-    kb = InlineKeyboardBuilder()
-    kb.row(InlineKeyboardButton(text="🔒 قفل الشات", callback_data="l_c"), InlineKeyboardButton(text="🔓 فتح الشات", callback_data="u_c"))
-    await m.answer("⚙️ **إعدادات حماية MB Gold:**", reply_markup=kb.as_markup())
-
-@dp.callback_query(F.data.in_({"l_c", "u_c"}))
-async def lock_unlock(call: types.CallbackQuery):
-    perms = False if call.data == "l_c" else True
-    await bot.set_chat_permissions(call.message.chat.id, ChatPermissions(can_send_messages=perms))
-    await call.answer("تم تنفيذ الأمر بنجاح!")
-
-# ==========================================
-# 👑 4. الواجهة والخدمات (Start)
-# ==========================================
-@dp.message(CommandStart())
-async def start(m: types.Message):
-    kb = InlineKeyboardBuilder()
-    kb.row(InlineKeyboardButton(text="💠 القناة الرسمية", url=f"https://t.me/{OFFICIAL_CHANNEL}"))
-    kb.row(InlineKeyboardButton(text="➕ أضفني لمجموعتك", url=f"https://t.me/{(await bot.get_me()).username}?startgroup=true"))
-    await m.answer(f"🔱 **أهلاً بك في عالم MB Gold Infinity**\n\nنظام الحماية الأكثر تطوراً في تليجرام جاهز لخدمتك الآن\.", parse_mode="MarkdownV2", reply_markup=kb.as_markup())
-
-# ==========================================
-# 🚀 5. التشغيل الذكي (The Fix)
-# ==========================================
-async def main():
-    # الخطوة اللي بتصلح الـ "مبيردش"
-    await bot.delete_webhook(drop_pending_updates=True)
-    asyncio.create_task(start_web())
-    print("🔥 MB Gold Infinity is Roaring!")
+    
+    print("🔥 MB Gold Viral: The Engine is Roaring!")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
