@@ -6,7 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
 
 # ==========================================
-# 👑 [ 1. الإعدادات العليا والهوية ]
+# 👑 [ 1. الإعدادات والتوكن ]
 # ==========================================
 TOKEN = '8758046360:AAEJXi2E_Pf2cgCdrx_bFcUpAt1W8lGwR3s'
 ADMIN_ID = 6363223356
@@ -14,202 +14,182 @@ CHANNEL_USER = "MBABmbab"
 CHANNEL_LINK = f"https://t.me/{CHANNEL_USER}"
 PORT = int(os.getenv("PORT", 8080))
 
-# قائمة الكلمات والروابط المحظورة (الدرع الحامي)
-BAD_WORDS = ["شتيمة", "t.me/", "http", "زفت", "إعلان", "كسم", "عرص", "متناك", "سكس", "قحبة", "شرموط"]
+# فلاتر الحماية
+BAD_WORDS = ["شتيمة", "t.me/", "http", "زفت", "إعلان", "كسم", "عرص", "متناك", "سكس"]
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # ==========================================
-# 💾 [ 2. قاعدة البيانات (الأرشيف الذهبي) ]
+# 💾 [ 2. قاعدة البيانات الشاملة ]
 # ==========================================
-conn = sqlite3.connect('mb_gold_final_archive.db', check_same_thread=False)
+conn = sqlite3.connect('mb_gold_clean.db', check_same_thread=False)
 db = conn.cursor()
-# جداول: المستخدمين، النقاط، الرصيد، الجروبات، الإنذارات
 db.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, points INTEGER DEFAULT 0, balance REAL DEFAULT 0.0)')
-db.execute('CREATE TABLE IF NOT EXISTS groups (chat_id INTEGER PRIMARY KEY, title TEXT, status TEXT DEFAULT "open")')
+db.execute('CREATE TABLE IF NOT EXISTS groups (chat_id INTEGER PRIMARY KEY, title TEXT)')
 db.execute('CREATE TABLE IF NOT EXISTS warns (chat_id INTEGER, user_id INTEGER, count INTEGER DEFAULT 0, PRIMARY KEY(chat_id, user_id))')
 conn.commit()
 
 # ==========================================
 # 🛡️ [ 3. نظام الحماية (Middleware) ]
 # ==========================================
-class FloodShield(BaseMiddleware):
-    def __init__(self, rate_limit=1.0):
+class AntiFlood(BaseMiddleware):
+    def __init__(self, limit=1.0):
         self.users = {}
         super().__init__()
     async def __call__(self, handler, event, data):
         if not event.from_user: return await handler(event, data)
         uid = event.from_user.id
         now = time.time()
-        if uid in self.users and now - self.users[uid] < rate_limit: return
+        if uid in self.users and now - self.users[uid] < limit: return
         self.users[uid] = now
         return await handler(event, data)
 
-dp.message.middleware(FloodShield())
+dp.message.middleware(AntiFlood())
 
 # ==========================================
-# 🔐 [ 4. المحركات (الاشتراك والرتب) ]
+# 🔐 [ 4. التحقق والاشتراك الإجباري ]
 # ==========================================
-async def check_sub(user_id):
+async def is_sub(uid):
     try:
-        member = await bot.get_chat_member(f"@{CHANNEL_USER}", user_id)
-        return member.status not in ["left", "kicked"]
+        m = await bot.get_chat_member(f"@{CHANNEL_USER}", uid)
+        return m.status not in ["left", "kicked"]
     except: return True
 
-def get_rank(p, uid):
-    if uid == ADMIN_ID: return "المطور الإمبراطوري 👑"
-    if p >= 5000: return "الملك الذهبي 🏆"
-    if p >= 1000: return "VIP 💎"
-    if p >= 500: return "عضو ماسي 💠"
-    return "عضو جديد 🌱"
-
 # ==========================================
-# 🤖 [ 5. التحقق البشري والترحيب ]
+# 🤖 [ 5. نظام الترحيب الذكي (بدون زحمة) ]
 # ==========================================
 @dp.chat_member(ChatMemberUpdatedFilter(member_status_changed=IS_NOT_MEMBER >> IS_MEMBER))
-async def welcome_captcha(event: ChatMemberUpdated):
-    user = event.from_user
+async def welcome_logic(event: ChatMemberUpdated):
+    u = event.from_user
     try:
-        await bot.restrict_chat_member(event.chat.id, user.id, permissions=ChatPermissions(can_send_messages=False))
+        await bot.restrict_chat_member(event.chat.id, u.id, permissions=ChatPermissions(can_send_messages=False))
         kb = InlineKeyboardBuilder()
-        kb.row(InlineKeyboardButton(text="✅ أنا إنسان (تحقق)", callback_data=f"verify_{user.id}"))
-        kb.row(InlineKeyboardButton(text="📢 القناة الرسمية", url=CHANNEL_LINK))
-        await bot.send_message(event.chat.id, f"🔱 أهلاً {user.mention_markdown()}\! في حماية **MB Gold**\. اضغط للتحقق وكشف مميزات البوت\.", parse_mode="MarkdownV2", reply_markup=kb.as_markup())
+        kb.add(InlineKeyboardButton(text="✅ اضغط للتحقق", callback_data=f"verify_{u.id}"))
+        await bot.send_message(event.chat.id, f"🔱 أهلاً {u.first_name}\! يرجى إثبات أنك إنسان لفتح المميزات\.", parse_mode="MarkdownV2", reply_markup=kb.as_markup())
     except: pass
 
 @dp.callback_query(F.data.startswith("verify_"))
-async def verify_user(call: types.CallbackQuery):
-    t_id = int(call.data.split("_")[1])
-    if call.from_user.id != t_id: return await call.answer("الزر ليس لك! ❌", show_alert=True)
-    await bot.restrict_chat_member(call.message.chat.id, t_id, permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True))
+async def verify_done(call: types.CallbackQuery):
+    tid = int(call.data.split("_")[1])
+    if call.from_user.id != tid: return await call.answer("مش ليك! ❌", show_alert=True)
+    await bot.restrict_chat_member(call.message.chat.id, tid, permissions=ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True))
     await call.message.delete()
-    await call.answer("✅ تم التحقق، نورت الجروب!", show_alert=True)
+    await call.answer("✅ تم التفعيل بنجاح!", show_alert=True)
 
 # ==========================================
-# 🎮 [ 6. أوامر التسلية والـ AI والبصمة ]
+# 🎮 [ 6. الأقسام المنفصلة (كل حاجة لوحدها) ]
 # ==========================================
+
+# القسم 1: معلومات الحساب (ID & Points)
 @dp.message(F.text.in_({"ايدي", "ID", "ملفي"}))
-async def profile(m: types.Message):
+async def cmd_id(m: types.Message):
     db.execute('SELECT points, balance FROM users WHERE user_id = ?', (m.from_user.id,))
     res = db.fetchone(); pts, bal = (res[0], res[1]) if res else (0, 0.0)
-    await m.answer(f"🔱 **بطاقة MB Gold**\n👤 الاسم: {m.from_user.first_name}\n🆔 الأيدي: `{m.from_user.id}`\n🏆 الرتبة: {get_rank(pts, m.from_user.id)}\n✨ النقاط: {pts}\n💰 الرصيد: {bal}$", parse_mode="Markdown")
+    await m.answer(f"🔱 **حساب MB Gold**\n👤 الاسم: {m.from_user.first_name}\n✨ النقاط: {pts}\n💰 الرصيد: {bal}$", parse_mode="Markdown")
 
+# القسم 2: الألعاب والتسلية (حظي)
 @dp.message(F.text == "حظي")
-async def luck(m: types.Message):
-    await m.reply(f"🔮 حظك اليوم: `{random.choice(['ذهبي 👑', 'سعيد ✨', 'محظوظ 🎁', 'هادئ 🌊'])}`")
+async def cmd_luck(m: types.Message):
+    await m.reply(f"🔮 حظك اليوم هو: `{random.choice(['أسطوري 🏆', 'جميل ✨', 'ذهبي 👑'])}`", parse_mode="Markdown")
 
+# القسم 3: نسبة الحب
 @dp.message(F.text.startswith("نسبة الحب"))
-async def love_meter(m: types.Message):
-    await m.reply(f"❤️ نسبة الحب هي: `{random.randint(0, 100)}%`")
+async def cmd_love(m: types.Message):
+    await m.reply(f"❤️ نسبة التوافق: `{random.randint(0, 100)}%`", parse_mode="Markdown")
 
-# نظام الـ AI (Blueprint)
+# القسم 4: الـ AI والـ Anatomy (أوامر منفصلة)
 @dp.message(Command("ai"))
-async def ai_feature(m: types.Message):
-    await m.reply("🤖 نظام الـ AI Dashboard قيد التجهيز للربط بموقعك قريباً!")
+async def cmd_ai(m: types.Message):
+    await m.answer("🤖 **AI Dashboard**\nنظام التلخيص وتوليد الصور جاهز للربط قريباً!")
 
-# نظام الـ Anatomy 3D
 @dp.message(Command("anatomy"))
-async def anatomy_link(m: types.Message):
-    await m.reply("🦴 تفضل بزيارة أطلس التشريح ثلاثي الأبعاد الخاص بنا:\n(رابط موقعك هنا قريباً)")
+async def cmd_anatomy(m: types.Message):
+    await m.answer("🦴 **Medical Atlas**\nجاري تجهيز عرض الـ 3D Anatomy لموقعك.")
 
 # ==========================================
-# ⚔️ [ 7. إدارة الجروبات الفولاذية ]
+# ⚔️ [ 7. محرك الإدارة الفولاذي ]
 # ==========================================
 @dp.message(F.chat.type.in_({"group", "supergroup"}))
-async def group_master(m: types.Message):
+async def group_handler(m: types.Message):
     if m.content_type in {'new_chat_members', 'left_chat_member'}:
         try: await m.delete(); return
         except: pass
 
-    # زيادة النقاط (Tap-to-Earn System)
+    # نظام الـ Tap-to-Earn (تجميع النقاط من الشات)
     db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (m.from_user.id,))
     db.execute('UPDATE users SET points = points + 1 WHERE user_id = ?', (m.from_user.id,))
     conn.commit()
 
     text = (m.text or "").lower()
-    # الحماية من الروابط والشتائم
     if any(w in text for w in BAD_WORDS):
-        admin = await bot.get_chat_member(m.chat.id, m.from_user.id)
-        if admin.status not in ["administrator", "creator"]:
+        adm = await bot.get_chat_member(m.chat.id, m.from_user.id)
+        if adm.status not in ["administrator", "creator"]:
             try: await m.delete(); return
             except: pass
 
-    # أوامر الإدارة بالرد
+    # أوامر الرد (كتم، حظر، إنذار) - كل واحد لوحده وبأزرار أقل
     if m.reply_to_message:
-        me = await bot.get_chat_member(m.chat.id, m.from_user.id)
-        if me.status in ["administrator", "creator"] or m.from_user.id == ADMIN_ID:
-            t_id = m.reply_to_message.from_user.id
-            t_name = m.reply_to_message.from_user.first_name
-            if text in ["حظر", "/ban"]: await bot.ban_chat_member(m.chat.id, t_id); await m.answer(f"🚫 تم طرد {t_name}")
-            elif text in ["كتم", "/mute"]: await bot.restrict_chat_member(m.chat.id, t_id, permissions=ChatPermissions(can_send_messages=False)); await m.answer(f"🤐 تم كتم {t_name}")
-            elif text in ["فك الكتم", "/unmute"]: await bot.restrict_chat_member(m.chat.id, t_id, permissions=ChatPermissions(can_send_messages=True)); await m.answer(f"🔊 فك كتم {t_name}")
-            elif text in ["تثبيت", "/pin"]: await bot.pin_chat_message(m.chat.id, m.reply_to_message.message_id); await m.answer("📌 تم التثبيت")
+        is_adm = await bot.get_chat_member(m.chat.id, m.from_user.id)
+        if is_adm.status in ["administrator", "creator"] or m.from_user.id == ADMIN_ID:
+            tid = m.reply_to_message.from_user.id
+            if text in ["حظر", "/ban"]: await bot.ban_chat_member(m.chat.id, tid); await m.answer("🚫 تم الطرد.")
+            elif text in ["كتم", "/mute"]: await bot.restrict_chat_member(m.chat.id, tid, permissions=ChatPermissions(can_send_messages=False)); await m.answer("🤐 تم الكتم.")
+            elif text in ["فك الكتم", "/unmute"]: await bot.restrict_chat_member(m.chat.id, tid, permissions=ChatPermissions(can_send_messages=True)); await m.answer("🔊 تم الفك.")
             elif text in ["انذار", "/warn"]:
-                db.execute('INSERT OR IGNORE INTO warns VALUES (?, ?, 0)', (m.chat.id, t_id))
-                db.execute('UPDATE warns SET count = count + 1 WHERE chat_id = ? AND user_id = ?', (m.chat.id, t_id))
+                db.execute('INSERT OR IGNORE INTO warns VALUES (?, ?, 0)', (m.chat.id, tid))
+                db.execute('UPDATE warns SET count = count + 1 WHERE chat_id = ? AND user_id = ?', (m.chat.id, tid))
                 conn.commit()
-                db.execute('SELECT count FROM warns WHERE chat_id = ? AND user_id = ?', (m.chat.id, t_id))
+                db.execute('SELECT count FROM warns WHERE chat_id = ? AND user_id = ?', (m.chat.id, tid))
                 w = db.fetchone()[0]
-                if w >= 3: await bot.ban_chat_member(m.chat.id, t_id); await m.answer(f"🚫 طرد {t_name} لتجاوز الإنذارات"); db.execute('UPDATE warns SET count = 0 WHERE chat_id = ? AND user_id = ?', (m.chat.id, t_id)); conn.commit()
-                else: await m.answer(f"⚠️ إنذار ({w}/3) لـ {t_name}")
-
-    # أوامر القفل والفتح العام
-    if text == "قفل الجروب":
-        await bot.set_chat_permissions(m.chat.id, ChatPermissions(can_send_messages=False))
-        await m.answer("🔒 تم قفل المجموعة.")
-    elif text == "فتح الجروب":
-        await bot.set_chat_permissions(m.chat.id, ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True))
-        await m.answer("🔓 تم فتح المجموعة.")
+                if w >= 3: await bot.ban_chat_member(m.chat.id, tid); await m.answer("🚫 طرد (تجاوز الإنذارات)")
+                else: await m.answer(f"⚠️ إنذار ({w}/3)")
 
 # ==========================================
-# 💼 [ 8. أوامر الخاص والمطور ]
+# 💼 [ 8. الخاص والمطور (تنظيم الأزرار) ]
 # ==========================================
 @dp.message(CommandStart(), F.chat.type == "private")
-async def start_private(m: types.Message):
-    if not await check_sub(m.from_user.id):
-        kb = InlineKeyboardBuilder().row(InlineKeyboardButton(text="✅ اشترك لتفعيل البوت", url=CHANNEL_LINK))
-        return await m.answer(f"⚠️ **مرحباً {m.from_user.first_name}\!**\nعذراً، يجب عليك الاشتراك في القناة أولاً\.", reply_markup=kb.as_markup())
+async def start_p(m: types.Message):
+    if not await is_sub(m.from_user.id):
+        kb = InlineKeyboardBuilder().add(InlineKeyboardButton(text="✅ اشترك لتفعيل البوت", url=CHANNEL_LINK))
+        return await m.answer(f"⚠️ **مرحباً {m.from_user.first_name}\!**\nعذراً، اشترك بالقناة أولاً لتشغيل مميزات البوت\.", reply_markup=kb.as_markup())
+    
     db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (m.from_user.id,)); conn.commit()
+    
+    # أزرار قليلة جداً ومنظمة
     kb = InlineKeyboardBuilder()
     kb.row(InlineKeyboardButton(text="➕ أضفني لجروبك", url=f"https://t.me/{(await bot.get_me()).username}?startgroup=true"))
-    kb.row(InlineKeyboardButton(text="📊 إحصائياتي", callback_data="stats_me"))
-    await m.answer(f"👑 **أهلاً بك في MB Gold الشامل\!**\n\nأنا الآن محرك كامل للإدارة، الترفيه، وجمع النقاط\. أضفني لجروبك الآن واستمتع بالتحكم المطلق\.", reply_markup=kb.as_markup())
+    kb.row(InlineKeyboardButton(text="📢 القناة", url=CHANNEL_LINK), InlineKeyboardButton(text="🛠️ المطور", url="https://t.me/MBABmbab"))
+    
+    await m.answer(f"👑 **MB Gold Supreme**\nالبوت شغال بكل المميزات (إدارة، نقاط، AI، ألعاب)\. أضفني الآن لجروبك واستمتع\.", reply_markup=kb.as_markup())
 
 @dp.message(Command("cast"), F.from_user.id == ADMIN_ID)
-async def broadcast(m: types.Message):
+async def cmd_cast(m: types.Message):
     txt = m.text.replace("/cast", "").strip()
     if not txt: return await m.answer("اكتب الرسالة!")
     db.execute("SELECT user_id FROM users"); u_list = db.fetchall()
-    ok = 0
+    c = 0
     for u in u_list:
-        try: await bot.send_message(u[0], f"📢 **إعلان هام:**\n\n{txt}"); ok += 1; await asyncio.sleep(0.05)
+        try: await bot.send_message(u[0], f"📢 **إعلان:**\n\n{txt}"); c += 1; await asyncio.sleep(0.05)
         except: pass
-    await m.answer(f"✅ تم الإرسال لـ {ok} شخص\.")
-
-@dp.message(Command("stats"), F.from_user.id == ADMIN_ID)
-async def stats_admin(m: types.Message):
-    db.execute("SELECT COUNT(*) FROM users"); u_c = db.fetchone()[0]
-    db.execute("SELECT COUNT(*) FROM groups"); g_c = db.fetchone()[0]
-    await m.answer(f"📊 **إحصائيات الإمبراطورية:**\nالمستخدمين: {u_c}\nالجروبات: {g_c}")
+    await m.answer(f"✅ تم الإرسال لـ {c} مستخدم.")
 
 # ==========================================
-# 🚀 [ 9. الحل النهائي للرد وتشغيل Railway ]
+# 🚀 [ 9. تشغيل Railway وإصلاح الرد ]
 # ==========================================
-async def web_handle(request): return web.Response(text="MB Gold System: Online")
+async def handle_home(request): return web.Response(text="MB Gold System is Online")
 
 async def main():
-    # الخطوة الأهم: حذف الويب هوك وتنظيف الرسائل المعلقة
+    # أهم خطوة لضمان الرد: حذف الويب هوك القديم
     await bot.delete_webhook(drop_pending_updates=True)
     
-    # تشغيل سيرفر الصحة لريلاوي
-    app = web.Application(); app.router.add_get('/', web_handle)
+    # تشغيل سيرفر الويب لريلاوي
+    app = web.Application(); app.router.add_get('/', handle_home)
     runner = web.AppRunner(app); await runner.setup()
     await web.TCPSite(runner, '0.0.0.0', PORT).start()
     
-    print("🔥 MB Gold Supreme Archive is LIVE!")
-    # بدء استقبال الرسائل (القلب النابض)
+    print("🔥 MB Gold Clean Elite is LIVE!")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
