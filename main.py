@@ -1,3 +1,4 @@
+
 import asyncio, os, sqlite3, time, random, logging
 from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.filters import Command, CommandStart, ChatMemberUpdatedFilter, IS_MEMBER, IS_NOT_MEMBER
@@ -26,9 +27,7 @@ dp = Dispatcher()
 # ==========================================
 conn = sqlite3.connect('mb_gold_final_master.db', check_same_thread=False)
 db = conn.cursor()
-# مستخدمين (نقاط، رصيد، محفظة)
 db.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, points INTEGER DEFAULT 0, balance REAL DEFAULT 0.0, wallet TEXT DEFAULT "لم تسجل")')
-# جروبات وإنذارات
 db.execute('CREATE TABLE IF NOT EXISTS groups (chat_id INTEGER PRIMARY KEY, title TEXT)')
 db.execute('CREATE TABLE IF NOT EXISTS warns (chat_id INTEGER, user_id INTEGER, count INTEGER DEFAULT 0, PRIMARY KEY(chat_id, user_id))')
 conn.commit()
@@ -93,13 +92,11 @@ async def link_handler(m: types.Message):
     url = m.text
     if any(site in url for site in ["tiktok", "instagram", "youtube", "facebook"]):
         await m.reply("📥 **MB Gold Downloader**\nجاري معالجة الرابط.. سيتم إرسال الملف فور جاهزيته\.")
-        # نظام التحميل يعمل في الخلفية هنا
 
 # ==========================================
 # 🎮 [ 7. الأقسام المنفصلة (كل ميزة لوحدها) ]
 # ==========================================
 
-# 1. كرت المعلومات (ID / Wallet)
 @dp.message(F.text.in_({"ايدي", "ID", "ملفي"}))
 async def profile_info(m: types.Message):
     db.execute('SELECT points, balance, wallet FROM users WHERE user_id = ?', (m.from_user.id,))
@@ -110,7 +107,6 @@ async def profile_info(m: types.Message):
            f"💳 المحفظة: `{wal}`\n━━━━━━━━━━━━━━")
     await m.answer(msg, parse_mode="Markdown")
 
-# 2. الألعاب والتسلية
 @dp.message(F.text == "حظي")
 async def luck_game(m: types.Message):
     await m.reply(f"🔮 حظك اليوم: `{random.choice(['أسطوري 🏆', 'ذهبي 👑', 'سعيد ✨', 'هادئ 🌊'])}`")
@@ -119,7 +115,6 @@ async def luck_game(m: types.Message):
 async def love_meter(m: types.Message):
     await m.reply(f"❤️ نسبة التوافق: `{random.randint(0, 100)}%`")
 
-# 3. الـ 3D Anatomy والـ AI
 @dp.message(Command("anatomy"))
 async def anatomy_atlas(m: types.Message):
     await m.answer("🦴 **Medical Atlas 3D**\nمرحباً بك في نظام التشريح ثلاثي الأبعاد\. يمكنك معاينة الأعضاء من موقعنا قريباً\.")
@@ -137,7 +132,6 @@ async def group_logic(m: types.Message):
         try: await m.delete(); return
         except: pass
 
-    # زيادة النقاط (Tap-to-Earn)
     db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (m.from_user.id,))
     db.execute('UPDATE users SET points = points + 1 WHERE user_id = ?', (m.from_user.id,))
     conn.commit()
@@ -156,6 +150,7 @@ async def group_logic(m: types.Message):
             if text in ["حظر", "/ban"]: await bot.ban_chat_member(m.chat.id, tid); await m.answer("🚫 تم الطرد.")
             elif text in ["كتم", "/mute"]: await bot.restrict_chat_member(m.chat.id, tid, permissions=ChatPermissions(can_send_messages=False)); await m.answer("🤐 تم الكتم.")
             elif text in ["فك الكتم", "/unmute"]: await bot.restrict_chat_member(m.chat.id, tid, permissions=ChatPermissions(can_send_messages=True)); await m.answer("🔊 تم الفك.")
+            elif text in ["تثبيت", "/pin"]: await bot.pin_chat_message(m.chat.id, m.reply_to_message.message_id); await m.answer("📌 تم التثبيت.")
             elif text in ["انذار", "/warn"]:
                 db.execute('INSERT OR IGNORE INTO warns VALUES (?, ?, 0)', (m.chat.id, tid))
                 db.execute('UPDATE warns SET count = count + 1 WHERE chat_id = ? AND user_id = ?', (m.chat.id, tid))
